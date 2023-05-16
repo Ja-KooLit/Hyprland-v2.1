@@ -154,22 +154,22 @@ set -e
 
 # Hyprland Main installation part including automatic detection of Nvidia-GPU is present in your system
 if ! lspci -k | grep -A 2 -E "(VGA|3D)" | grep -iq nvidia; then
-    printf "${YELLOW} No NVIDIA GPU detected in your system. Installing Hyprland without Nvidia support..."
+    printf "${YELLOW}No NVIDIA GPU detected in your system. Installing Hyprland without Nvidia support..."
     sleep 1
     for HYP in hyprland; do
         install_package "$HYP" 2>&1 | tee -a "$LOG"
     done
 else
     # Prompt user for Nvidia installation
-    printf "${YELLOW} NVIDIA GPU Detected. Kindly note that Nvidia-Wayland is still kinda wonky. Kindly check Hyprland Wiki if Issues encountered!\n"
+    printf "${YELLOW}NVIDIA GPU Detected. Kindly note that Nvidia-Wayland is still kinda wonky. Kindly check Hyprland Wiki if Issues encountered!\n"
     sleep 1
-    printf "${YELLOW} Kindly enable some nvidia-related stuff in the configs after installation\n"
+    printf "${YELLOW}Kindly enable some nvidia-related stuff in the configs after installation\n"
     sleep 2
-    read -n1 -rp "Would you like to install the Nvidia Hyprland? (y/n) " NVIDIA
+    read -n1 -rp "Would you like to install the Nvidia Hyprland? (y/n) " install_nvidia
     echo
-    if [[ $NVIDIA =~ ^[Yy]$ ]]; then
-    # Install Nvidia Hyprland
-    printf "${YELLOW}Installing Nvidia Hyprland...${RESET}\n"
+    if [[ $install_nvidia =~ ^[Yy]$ ]]; then
+        # Install Nvidia Hyprland
+        printf "${YELLOW}Installing Nvidia Hyprland...${RESET}\n"
         if pacman -Qs hyprland > /dev/null; then
             read -n1 -rp "hyprland detected. Would you like to remove and install hyprland-nvidia instead? (y/n) " nvidia_hypr
             echo
@@ -179,64 +179,62 @@ else
         fi
         install_package "hyprland-nvidia-git" 2>&1 | tee -a "$LOG"
     else
-        printf "${YELLOW} Installing non-Nvidia Hyprland..."
+        printf "${YELLOW}Installing non-Nvidia Hyprland..."
         for hyprnvi in hyprland-nvidia-git hyprland-nvidia hyprland-nvidia-hidpi-git; do
             sudo pacman -R --noconfirm "$hyprnvi" 2>&1 | tee -a "$LOG"
         done
         for HYP2 in hyprland; do
             install_package "$HYP2" 2>&1 | tee -a "$LOG"
         done
-        # Install additional nvidia packages
-        printf "${YELLOW} Installing additional Nvidia packages...\n"
+        # Install additional Nvidia packages
+        printf "${YELLOW}Installing additional Nvidia packages...\n"
         for krnl in $(cat /usr/lib/modules/*/pkgbase); do
-            for NVIDIA in "${krnl}-headers" nvidia-dkms nvidia-settings nvidia-utils libva libva-nvidia-driver-git; do
-            install_package "$NVIDIA" 2>&1 | tee -a "$LOG"
+            for nvidia_pkg in "${krnl}-headers" nvidia-dkms nvidia-settings nvidia-utils libva libva-nvidia-driver-git; do
+                install_package "$nvidia_pkg" 2>&1 | tee -a "$LOG"
             done
         done
 
-         # adding nvidia modules in mkinitcpio
+        # Adding Nvidia modules in mkinitcpio
         sudo sed -i 's/MODULES=()/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf 2>&1 | tee -a "$LOG"
         sudo mkinitcpio -P 2>&1 | tee -a "$LOG"
-         printf "\n"   
+
         printf "\n"
         printf "\n"
 
-        # preparing exec.conf to enable env = WLR_NO_HARDWARE_CURSORS,1 so it will be ready once config files copied
+        # Preparing exec.conf to enable env = WLR_NO_HARDWARE_CURSORS,1 so it will be ready once config files are copied
         sed -i '44s/#//' config/hypr/configs/exec.conf
-    
+
         # Additional Nvidia steps
         NVEA="/etc/modprobe.d/nvidia.conf"
         if [ -f "$NVEA" ]; then
-            printf "${OK} Seems like nvidia-drm modeset=1 is already added in your system..moving on.\n"
+            printf "${OK}Seems like nvidia-drm modeset=1 is already added in your system..moving on.\n"
             printf "\n"
         else
             printf "\n"
-            printf "${YELLOW} Adding options to $NVEA..."
+            printf "${YELLOW}Adding options to $NVEA..."
             sudo echo -e "options nvidia-drm modeset=1" | sudo tee -a /etc/modprobe.d/nvidia.conf 2>&1 | tee -a "$LOG"
-            printf "\n"  
+            printf "\n"
         fi
-
         # Blacklisting nouveau
-        read -n1 -rep "${CAT} Would you like to blacklist nouveau? (y/n)" nouveau
+        read -n1 -rep "${CAT}Would you like to blacklist nouveau? (y/n)" blacklist_nouveau
         echo
-            if [[ $nouveau =~ ^[Yy]$ ]]; then
-            NVEAU="/etc/modprobe.d/nouveau.conf"
-            if [ -f "$NVEAU" ]; then
-                printf "${OK} Seems like nouveau is already blacklisted..moving on.\n"
-            else
-                printf "\n"
-                sudo echo -e "blacklist nouveau" | sudo tee -a "$NVEAU" 2>&1 | tee -a "$LOG"
-                printf "${NOTE} has been added to $NVEAU.\n"  
-            fi
-            # to completely blacklist nouveau (See wiki.archlinux.org/title/Kernel_module#Blacklisting 6.1)
-            if [ -f "/etc/modprobe.d/blacklist.conf" ]; then
+        if [[ $blacklist_nouveau =~ ^[Yy]$ ]]; then
+        NVEAU="/etc/modprobe.d/nouveau.conf"
+        if [ -f "$NVEAU" ]; then
+            printf "${OK}Seems like nouveau is already blacklisted..moving on.\n"
+        else
+            printf "\n"
+            sudo echo -e "blacklist nouveau" | sudo tee -a "$NVEAU" 2>&1 | tee -a "$LOG"
+            printf "${NOTE}has been added to $NVEAU.\n"
+        fi
+        # To completely blacklist nouveau (See wiki.archlinux.org/title/Kernel_module#Blacklisting 6.1)
+        if [ -f "/etc/modprobe.d/blacklist.conf" ]; then
             # If the file exists, append the line to it
             sudo echo "install nouveau /bin/true" | sudo tee -a "/etc/modprobe.d/blacklist.conf" 2>&1 | tee -a "$LOG" >/dev/null
-            else
+        else
             # If the file does not exist, create it and add the line
             sudo echo "install nouveau /bin/true" | sudo tee "/etc/modprobe.d/blacklist.conf" 2>&1 | tee -a "$LOG" >/dev/null
-            fi
-        fi    
+        fi
     fi
 fi
 
